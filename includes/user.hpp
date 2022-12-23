@@ -29,6 +29,7 @@ class User {
 		void RecvRequestServer(const char* buffer, const size_t nbytes)	{ request_server_.append(buffer, nbytes); }
 		void UpdateRequestUser(const size_t result)		{ request_user_ = request_user_.substr(result, request_user_.size()); }
 		void UpdateRequestServer(const size_t result)	{ request_user_ = request_user_.substr(result, request_server_.size()); }
-};
+
+}; //User
 
 #endif
