@@ -5,23 +5,33 @@
 # include <netinet/in.h>
 # include <arpa/inet.h>
 # include <sys/stat.h>
+# include <unistd.h>
 
 class User {
 	private:
 		int				user_fd_;
-		int				retmote_fd_;
 		sockaddr_in		user_addr_;
+		int				remote_fd_;
 		std::string		request_user_;
 		std::string		request_server_;
 
 	public:
 		User() = delete;
-		~User(){}
-		User(const int user_fd, const sockaddr_in& addr, sockaddr_in& remote_addr);
+
+		~User() {
+			close(remote_fd_);
+			close(user_fd_);
+		}
+
+		User(const int& user_fd, const sockaddr_in& addr, sockaddr_in& remote_addr) : user_fd_(user_fd), user_addr_(addr) {
+			if (remote_fd_ > 0 && connect(remote_fd_, reinterpret_cast<sockaddr *>(&remote_addr), sizeof(remote_addr)) < 0) {
+				remote_fd_ = -1;
+			}
+		}
 
 	public:
 		const int GetUserFd() const					{ return user_fd_; }
-		const int GetRemoteFd() const				{ return retmote_fd_; }
+		const int GetRemoteFd() const				{ return remote_fd_; }
 		const std::string &GetRequestUser() const	{ return request_user_; }
 		const std::string &GetRequestServer() const	{ return request_server_; }
 		
