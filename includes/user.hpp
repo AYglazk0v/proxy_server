@@ -4,6 +4,8 @@
 # include <iostream>
 # include <netinet/in.h>
 # include <arpa/inet.h>
+#include <stdexcept>
+#include <sys/socket.h>
 # include <sys/stat.h>
 # include <unistd.h>
 
@@ -20,12 +22,15 @@ class User {
 
 		~User() {
 			close(remote_fd_);
-			close(user_fd_);
 		}
 
 		User(const int& user_fd, const sockaddr_in& addr, sockaddr_in& remote_addr) : user_fd_(user_fd), user_addr_(addr) {
-			if (remote_fd_ > 0 && connect(remote_fd_, reinterpret_cast<sockaddr *>(&remote_addr), sizeof(remote_addr)) < 0) {
-				remote_fd_ = -1;
+			remote_fd_ = socket(AF_INET, SOCK_STREAM,0);
+			if (remote_fd_ < 0) {
+				throw std::runtime_error("Failed to create socket");
+			}
+			if (connect(remote_fd_, reinterpret_cast<sockaddr *>(&remote_addr), sizeof(remote_addr)) < 0) {
+				throw std::runtime_error("Failed to сonnect socket");
 			}
 		}
 
