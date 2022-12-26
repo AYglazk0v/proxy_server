@@ -1,5 +1,4 @@
 #include "../includes/manager_server.hpp"
-#include <memory>
 
 int main(int argc, char** argv){
     ManagerServer* server= new ManagerServer();
