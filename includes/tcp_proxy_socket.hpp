@@ -1,17 +1,10 @@
 #ifndef TCP_SOCKET_HPP
 #define  TCP_SOCKET_HPP
 
-#include <cstddef>
-#include <fcntl.h>
-#include <memory>
-#include <string>
-#include <sys/epoll.h>
-#include <unistd.h>
-#include <unordered_map>
-#include <netinet/in.h>
-#include <stdexcept>
-#include <sys/socket.h>
-#include <utility>
+# include <fcntl.h>
+# include <unistd.h>
+# include <netinet/in.h>
+# include <stdexcept>
 
 #include "connections.hpp"
 
@@ -20,10 +13,9 @@ class ProxyServer;
 class TcpProxySocket {
 	private:
 		friend class ProxyServer;
-
-		int                                 fd_;
-		struct sockaddr_in                  src_addr_;
-		struct sockaddr_in                  target_addr_;
+		
+		struct sockaddr_in                  src_addr_{};
+		struct sockaddr_in                  target_addr_{};
 
 	public:
 		TcpProxySocket() {}
@@ -42,7 +34,7 @@ class TcpProxySocket {
 			if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0) {
 				throw std::runtime_error("Error in Listen(): fcntl()");
 			}
-			if (bind(fd, reinterpret_cast<struct sockaddr *>(&addr), sizeof(struct sockaddr_in)) < 0) {
+			if (bind(fd, reinterpret_cast<struct sockaddr*>(addr), sizeof(struct sockaddr_in)) < 0) {
 				throw std::runtime_error("Error in Listen(): bind()");
 			}
 			if (listen(fd, SOMAXCONN) < 0) {
@@ -60,10 +52,7 @@ class TcpProxySocket {
 			if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0) {
 				throw std::runtime_error("Error in Connect(): setsockopt()");
 			}
-			if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0) {
-				throw std::runtime_error("Error in Connect(): fcntl()");
-			}
-			if (connect(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(sockaddr_in)) < 0) {
+			if (connect(fd, reinterpret_cast<struct sockaddr*>(addr), sizeof(struct sockaddr_in)) < 0) {
 				throw std::runtime_error("Error in Connect(): connect()");
 			}
 			return fd;

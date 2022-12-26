@@ -8,11 +8,12 @@ SRC_DIR		=	./src
 OBJ_DIR		=	./obj
 
 HEADER		=	logger.hpp \
+				connections.hpp \
 				proxy_server.hpp \
-				user.hpp \
+				tcp_proxy_socket.hpp \
+				manager_server.hpp
 
-SRC			=	main.cc \
-				proxy_server.cc
+SRC			=	main.cc
 
 OBJ			=	$(addprefix $(OBJ_DIR)/, $(SRC:.cc=.o))
 

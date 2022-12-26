@@ -1,7 +1,6 @@
 #ifndef CONNECTIONS_HPP
 # define CONNECTIONS_HPP
 
-# include <cstddef>
 # include <memory>
 
 static constexpr size_t MAX_MSG_PACK = 1024;

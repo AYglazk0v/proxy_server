@@ -1,20 +1,10 @@
 #ifndef PROXY_SERVER_HPP
 # define PROXY_SERVER_HPP
 
-#include <asm-generic/errno-base.h>
-#include <cerrno>
-#include <cstddef>
-#include <exception>
-#include <string>
 # include <vector>
-# include <memory>
-# include <cstdlib>
-# include <sys/poll.h>
+# include <arpa/inet.h>
 # include <sys/epoll.h>
-# include <fcntl.h>
 # include <unordered_map>
-# include <algorithm>
-# include <sys/socket.h>
 
 # include "logger.hpp"
 # include "tcp_proxy_socket.hpp"
@@ -24,7 +14,9 @@ class TcpProxySocket;
 class ProxyServer {
 	private:
 		static constexpr size_t MAX_COUNT_EVENTS = 1024;
+		friend class ManagerServer;
 
+		pthread_t							thread_;
 		int									master_socket_;
 		int                                 epoll_fd_;
 		std::unordered_map<int, info_ptr>   connections_;
@@ -32,6 +24,44 @@ class ProxyServer {
 		TcpProxySocket						socket_;
 		
 	public:
+		~ProxyServer() {
+			close(master_socket_);
+			close(epoll_fd_);
+			for (auto it = connections_.begin(), ite = connections_.end(); it != ite; ++it) {
+				info_ptr curr = (*it).second;
+				close(curr->src_fd);
+				close(curr->targer_fd);
+			}
+		}
+
+		void Setup(const char* src_host, int src_port, const char* remote_host, int remote_port) {			
+			socket_.src_addr_.sin_family = AF_INET;
+			socket_.src_addr_.sin_port = htons(src_port);
+			if (src_host == nullptr) {
+				socket_.src_addr_.sin_addr.s_addr = htonl(INADDR_ANY);
+			} else if (inet_pton(AF_INET, src_host, &socket_.src_addr_.sin_addr) <= 0) {
+				throw std::runtime_error("Error: Setup(): inet_pton(SRC_HOST)");
+			}
+
+			socket_.target_addr_.sin_family = AF_INET;
+			socket_.target_addr_.sin_port = htons(remote_port);
+			if (inet_pton(AF_INET, remote_host, &socket_.target_addr_.sin_addr) <= 0) {
+				throw std::runtime_error("Error: Setup(): inet_pton(REMOTE_HOST)");
+			}
+			try {
+				master_socket_ = socket_.Listen(&socket_.src_addr_);
+				epoll_fd_ = epoll_create1(0);
+				struct epoll_event ev;
+				ev.events = EPOLLIN;
+				ev.data.fd = master_socket_;
+				if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, master_socket_, &ev) < 0) {
+					throw std::runtime_error("Error: Setup(): epoll_ctl");
+				}
+			} catch (std::exception& e) {
+				throw std::runtime_error(e.what());
+			}
+		}
+
 		void CloseConnect(int fd) {
 			if (connections_.count(fd) == 1) {
 				int fd_pair = GetSecondDescriptor(fd);
@@ -166,9 +196,9 @@ class ProxyServer {
 					}
 				}
 			}
+			logger_.AddToLog("Server stop");
 		}
 
-		
 }; //ProxyServer
 
 #endif

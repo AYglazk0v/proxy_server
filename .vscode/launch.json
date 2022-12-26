@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "Debug",
             "program": "${workspaceFolder}/proxy_server",
-            "args": ["2121", "127.0.0.1","5555"],
+            "args": [""],
             "cwd": "${workspaceFolder}"
         }
     ]
