@@ -20,11 +20,12 @@ using ptr_User = std::shared_ptr<User>;
 
 class ProxyServer {
 	private:
-		static constexpr size_t MAX_EVENTS = 1024;
-		static constexpr size_t MAX_BUFFER_RECV = 1024;
+		static constexpr size_t 			MAX_EVENTS = 1024;
+		static constexpr size_t				MAX_BUFFER_RECV = 1024;
 		
 		int									fd_epoll_;
-		struct epoll_event	 				events_[MAX_EVENTS];
+		struct epoll_event					Event;
+		struct epoll_event	 				events_[MAX_EVENTS] = {};
 		
 		Logger								logger_;
 

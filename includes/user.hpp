@@ -20,9 +20,7 @@ class User {
 	public:
 		User() = delete;
 
-		~User() {
-			close(remote_fd_);
-		}
+		~User(){}
 
 		User(const int& user_fd, const sockaddr_in& addr, sockaddr_in& remote_addr) : user_fd_(user_fd), user_addr_(addr) {
 			remote_fd_ = socket(AF_INET, SOCK_STREAM,0);
