@@ -21,6 +21,7 @@ using ptr_User = std::shared_ptr<User>;
 class ProxyServer {
 	private:
 		static constexpr size_t MAX_EVENTS = 1024;
+		static constexpr size_t MAX_BUFFER_RECV = 1024;
 		
 		int									fd_epoll_;
 		struct epoll_event	 				events_[MAX_EVENTS];
@@ -40,12 +41,16 @@ class ProxyServer {
 		sockaddr_in							remote_addr_{};
 	
 	private:
-		void createEpollFd(int fd);
-		void EpollInServer();
 		void InputValidation(int argc, char** argv);
 		void SettingContextAddr();
 		void CreateSocketAndStart();
 		void initEpoll();
+		void createEpollFd(int fd);
+		void EpollInServer();
+		void EpollInUser(epoll_event& curr_evnt);
+		void EpollOut(epoll_event& curr_evnt);
+		void EpollElse(epoll_event& curr_evnt);
+		void CloseConnection();
 
 	public:
 		ProxyServer() = delete;

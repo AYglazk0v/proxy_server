@@ -1,5 +1,10 @@
 #include "../includes/proxy_server.hpp"
+#include <fcntl.h>
 #include <stdexcept>
+#include <string>
+#include <sys/epoll.h>
+#include <sys/poll.h>
+#include <sys/socket.h>
 
 ProxyServer::ProxyServer(int argc, char** argv) {
 	try {
@@ -36,9 +41,14 @@ void ProxyServer::CreateSocketAndStart() {
 void ProxyServer::initEpoll() {
 	struct epoll_event Event;
 	fd_epoll_ = epoll_create1(0);
+	if (fd_epoll_ < 0 ) {
+		throw std::runtime_error("Error: erpoll_create1");
+	}
 	Event.data.fd = local_sd_;
 	Event.events = EPOLLIN;
-	epoll_ctl(fd_epoll_, EPOLL_CTL_ADD, local_sd_, &Event);
+	if (epoll_ctl(fd_epoll_, EPOLL_CTL_ADD, local_sd_, &Event) < 0) {
+		throw std::runtime_error("Error: erpoll_ctl");
+	}
 }
 
 void ProxyServer::SettingContextAddr() {
@@ -79,7 +89,7 @@ void ProxyServer::InputValidation(int argc, char** argv) {
 void ProxyServer::createEpollFd(int fd) {
 	struct epoll_event Event;
 	Event.data.fd = fd;
-	Event.events = EPOLLIN;
+	Event.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLHUP;
 	if (epoll_ctl(fd_epoll_, EPOLL_CTL_ADD, fd, &Event) < 0) {
 		throw std::runtime_error("Error epoll_ctl");
 	}
@@ -101,11 +111,11 @@ void ProxyServer::EpollInServer() {
 			close(user_fd);
 			return;
 		}
-		
+	
 		char buff[16];
 		inet_ntop(AF_INET, &addr.sin_addr, buff, sizeof(buff));
 		logger_.AddToLog("NEW USER CONNECT: " + std::to_string(user_fd) + "from : " + buff);
-		
+	
 		try {
 			ptr_User user = std::make_shared<User>(User(user_fd, addr, remote_addr_));	
 			createEpollFd(user_fd);
@@ -121,22 +131,92 @@ void ProxyServer::EpollInServer() {
 	}
 }
 
+void ProxyServer::EpollInUser(epoll_event& curr_evnt) {
+	logger_.AddToLog("Epoll in User: " + std::to_string(curr_evnt.data.fd));
+	
+	ptr_User us = users_.find(curr_evnt.data.fd)->second;
 
+	char buffer[MAX_BUFFER_RECV];
+	int cnt_bytes = recv(curr_evnt.data.fd, buffer, MAX_BUFFER_RECV - 1, MSG_NOSIGNAL);
+
+	logger_.AddToLog("RECV: " + std::to_string(cnt_bytes));
+	if (cnt_bytes < 0) {
+		logger_.AddToLog("Error read from : " + std::to_string(curr_evnt.data.fd));
+		users_close_.push_back(us->GetUserFd());
+		users_close_.push_back((us->GetRemoteFd()));
+	} else if (cnt_bytes == 0) {
+		logger_.AddToLog("Client ended session from : " + std::to_string(curr_evnt.data.fd));	
+		users_close_.push_back(us->GetUserFd());
+		users_close_.push_back((us->GetRemoteFd()));
+	} else {
+		if (curr_evnt.data.fd == us->GetUserFd()) {
+			us->RecvRequestUser(buffer, cnt_bytes);
+			logger_.AddToLog("RecvRequestUser :" + us->GetRequestUser());
+		} else {
+			us->RecvRequestServer(buffer, cnt_bytes);
+			logger_.AddToLog("RecvRequestServer : " + us->GetRequestServer());
+		}
+	}
+}
+
+void ProxyServer::EpollOut(epoll_event& curr_evnt) {
+	logger_.AddToLog("Epoll Out : " + std::to_string(curr_evnt.data.fd));
+	
+	ptr_User us = users_.find(curr_evnt.data.fd)->second;
+	
+	int cnt_bytes;
+	if (curr_evnt.data.fd == us->GetUserFd()) {
+		cnt_bytes = send(us->GetRemoteFd(), us->GetRequestUser().c_str(), us->GetRequestUser().length(), MSG_NOSIGNAL);
+	} else {
+		cnt_bytes = send(us->GetUserFd(), us->GetRequestServer().c_str(), us->GetRequestServer().length(), MSG_NOSIGNAL);
+	}
+
+	if (cnt_bytes < 0){
+		logger_.AddToLog("Error send from : " + std::to_string(curr_evnt.data.fd));
+		users_close_.push_back(us->GetUserFd());
+		users_close_.push_back((us->GetRemoteFd()));
+		return;
+	}
+	if (curr_evnt.data.fd == us->GetUserFd()) {
+		us->UpdateRequestUser(cnt_bytes);
+	} else {
+		us->UpdateRequestServer(cnt_bytes);
+	}
+}
+
+void ProxyServer::EpollElse(epoll_event& curr_evnt) {
+	if (curr_evnt.events & POLLERR) {
+		logger_.AddToLog("EPoll POLLER : " + std::to_string(curr_evnt.data.fd));
+	} else {
+		logger_.AddToLog("EPoll POLLHUP : " + std::to_string(curr_evnt.data.fd));
+	}
+	ptr_User us = users_.find(curr_evnt.data.fd)->second;
+	users_close_.push_back(us->GetUserFd());
+	users_close_.push_back((us->GetRemoteFd()));
+}
+
+void ProxyServer::CloseConnection() {
+	for (auto it = users_close_.begin(), ite = users_close_.end(); it != ite; ++it) {
+		users_.erase(*it);
+		close(*it);
+	}
+	users_close_.clear();
+}
 
 void ProxyServer::Loop() {
 	while (true) {
-		int count_epoll = epoll_wait(fd_epoll_, events_, MAX_EVENTS, 1000);
-		if (count_epoll < 0) {
-			logger_.AddToLog("count_epoll < 0");
-			continue;
-		}
-		if (count_epoll == 0) {
-			continue;
-		}
+		int count_epoll = epoll_wait(fd_epoll_, events_, MAX_EVENTS, -1);
 		for (unsigned int i = 0; i < count_epoll; ++i) {
 			if (events_[i].data.fd == local_sd_) {
 				EpollInServer();
+			} else if (events_[i].events & POLLIN) {
+				EpollInUser(events_[i]);
+			} else if (events_[i].events & POLLOUT) {
+				EpollOut(events_[i]);
+			} else {
+				EpollElse(events_[i]);
 			}
 		}
+		CloseConnection();
 	}
 }
